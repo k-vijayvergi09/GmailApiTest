@@ -10,6 +10,7 @@ import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import com.example.gmailapitest.BuildConfig
+import com.example.gmailapitest.MainViewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -41,7 +42,8 @@ data class UserInfo(
 
 class AuthManager(
     private val context: Context,
-    private val credentialManager: CredentialManager
+    private val credentialManager: CredentialManager,
+    private val mainViewModel: MainViewModel
 ) {
     private val verifier = GoogleIdTokenVerifier.Builder(
         NetHttpTransport(),
@@ -61,7 +63,7 @@ class AuthManager(
 
     private var currentUserInfo: UserInfo? = null
 
-    fun handleSignInResult(account: GoogleSignInAccount) {
+    fun handleSignInResult(account: GoogleSignInAccount): GoogleAccountCredential {
         Log.d("AuthManager", "Handling sign-in result for account: ${account.email}")
         
         // Create a GoogleAccountCredential for Gmail API access
@@ -72,8 +74,10 @@ class AuthManager(
             setSelectedAccount(Account(account.email, "com.google"))
         }
 
+        return googleAccountCredential
+
         // Initialize Gmail service
-        initializeGmailService(googleAccountCredential)
+//        initializeGmailService(googleAccountCredential)
     }
 
     // Contains OAuth flow from search result [4][8]
@@ -166,45 +170,12 @@ class AuthManager(
         }
     }
 
-    suspend fun requestGmailAccess(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            Log.d("AuthManager", "Requesting Gmail API access")
-            
-            // Check if user is already signed in
-            val account = GoogleSignIn.getLastSignedInAccount(context)
-            if (account != null) {
-                Log.d("AuthManager", "User is already signed in")
-                handleSignInResult(account)
-                return@withContext true
-            }
-
-            // Get the sign-in intent
-            val signInIntent = signInClient.signInIntent
-            
-            suspendCoroutine { continuation ->
-                try {
-                    // Start the sign-in activity
-                    context.startActivity(signInIntent)
-                    
-                    // The activity will handle the result and call back to resume the coroutine
-                    // with the appropriate result
-                    continuation.resume(true)
-                } catch (e: Exception) {
-                    Log.e("AuthManager", "Error launching sign-in intent", e)
-                    continuation.resume(false)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("AuthManager", "Error requesting Gmail access", e)
-            false
-        }
-    }
-
     suspend fun signOut() {
         try {
             Log.d("AuthManager", "Starting sign out process")
             signInClient.signOut()
             currentUserInfo = null
+            mainViewModel.setAuthenticated(false)
             Log.d("AuthManager", "Successfully signed out")
         } catch (e: Exception) {
             Log.e("AuthManager", "Error during sign out", e)
@@ -212,7 +183,7 @@ class AuthManager(
         }
     }
 
-    fun initializeGmailService(credential: GoogleAccountCredential) {
+    fun initializeGmailService(credential: GoogleAccountCredential, onMessagesLoaded: (List<Map<String, String>>) -> Unit = {}) {
         val httpTransport = GoogleNetHttpTransport.newTrustedTransport()
         val jsonFactory = GsonFactory.getDefaultInstance()
 
@@ -223,8 +194,15 @@ class AuthManager(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val user = "me"
-                val listResponse = gmailService.users().messages().list(user).execute()
+                // Search for messages with "Credit card statement" in the subject
+                val query = "subject:\"Credit card statement\""
+                val listResponse = gmailService.users().messages().list(user)
+                    .setQ(query)
+                    .setMaxResults(10)
+                    .execute()
+                
                 val messages = listResponse.messages
+                val messageDetails = mutableListOf<Map<String, String>>()
 
                 messages?.forEach { message ->
                     val msg = gmailService.users().messages().get(user, message.id).execute()
@@ -232,9 +210,18 @@ class AuthManager(
                     val from = msg.payload.headers.find { it.name == "From" }?.value ?: "Unknown sender"
 
                     Log.d("GmailApiService", "subject $subject, from $from")
+                    messageDetails.add(mapOf("subject" to subject, "from" to from, "id" to message.id))
+                }
+                
+                // Switch to main thread to call the callback function
+                withContext(Dispatchers.Main) {
+                    onMessagesLoaded(messageDetails)
                 }
             } catch (e: Exception) {
                 Log.e("GmailApiService", "Error accessing Gmail", e)
+                withContext(Dispatchers.Main) {
+                    onMessagesLoaded(emptyList())
+                }
             }
         }
     }

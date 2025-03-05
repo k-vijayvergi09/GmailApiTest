@@ -19,32 +19,18 @@ import androidx.credentials.CredentialManager
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.viewModels
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 
 class MainActivity : ComponentActivity() {
+    private val mainViewModel: MainViewModel by viewModels()
     private val credentialManager by lazy {
         CredentialManager.create(this)
     }
 
     private val authManager by lazy {
-        AuthManager(this, credentialManager)
-    }
-
-    private val signInLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        try {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            val account = task.getResult(ApiException::class.java)
-            Log.d("MainActivity", "Sign in successful: ${account?.email}")
-            
-            // Handle successful sign-in by initializing Gmail service
-            account?.let { googleAccount ->
-                authManager.handleSignInResult(googleAccount)
-            }
-        } catch (e: ApiException) {
-            Log.e("MainActivity", "Sign in failed", e)
-        }
+        AuthManager(this, credentialManager, mainViewModel)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,15 +39,46 @@ class MainActivity : ComponentActivity() {
         setContent {
             GmailApiTestTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    val signInLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.StartActivityForResult()
+                    ) { result ->
+                        try {
+                            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                            val account = task.getResult(ApiException::class.java)
+                            Log.d("MainActivity", "Sign in successful: ${account?.email}")
+
+                            // Handle successful sign-in by initializing Gmail service
+                            account?.let { googleAccount ->
+                                handleSignInResult(googleAccount)
+                            }
+                        } catch (e: ApiException) {
+                            Log.e("MainActivity", "Sign in failed", e)
+                        }
+                    }
+
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
                         authManager = authManager,
-                        onSignInRequested = { signInIntent ->
-                            signInLauncher.launch(signInIntent)
-                        }
+                        signInLauncher = signInLauncher
                     )
                 }
             }
+        }
+    }
+
+    private fun handleSignInResult(account: GoogleSignInAccount) {
+        // Start loading state
+//        mainViewModel.setLoading(true)
+        
+        // Get the credential from AuthManager
+        val credential = authManager.handleSignInResult(account)
+        
+        // Initialize Gmail service and handle results
+        authManager.initializeGmailService(credential) { messageDetails ->
+            // Update ViewModel with the messages
+            mainViewModel.updateMessages(messageDetails)
+            mainViewModel.setAuthenticated(true)
+//            mainViewModel.setLoading(false)
         }
     }
 }

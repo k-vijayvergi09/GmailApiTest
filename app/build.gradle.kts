@@ -93,4 +93,7 @@ dependencies {
     implementation("com.google.auth:google-auth-library-oauth2-http:1.23.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
 
+
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
+
 }
