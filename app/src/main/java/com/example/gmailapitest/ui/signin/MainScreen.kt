@@ -36,6 +36,7 @@ fun MainScreen(
     val messages by mainViewModel.messages.collectAsState()
     val isUserAuthenticated by mainViewModel.userAuthenticated.collectAsState()
     val context = LocalContext.current
+    val isLoadingMessages by mainViewModel.loadingMessages.collectAsState()
 
     Column(
         modifier = modifier
@@ -43,65 +44,6 @@ fun MainScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Authentication section
-//        if (isLoading) {
-//            CircularProgressIndicator()
-//        } else {
-//            when {
-//                userInfo != null -> {
-//                    // Show user info and Gmail access button
-//                    Text("Welcome ${userInfo?.name}!")
-//                    Text("Email: ${userInfo?.email}")
-//                    Spacer(modifier = Modifier.height(16.dp))
-//                    Button(
-//                        onClick = {
-//                            scope.launch {
-//                                try {
-//                                    authManager.signOut()
-//                                    userInfo = null
-//                                    // Clear messages when signing out
-//                                    mainViewModel.updateMessages(emptyList())
-//                                } catch (e: Exception) {
-//                                    error = e.message ?: "Failed to sign out"
-//                                }
-//                            }
-//                        }
-//                    ) {
-//                        Text("Sign Out")
-//                    }
-//                }
-//                else -> {
-//                    // Show sign in button
-//                    Button(
-//                        onClick = {
-//                            scope.launch {
-//                                isLoading = true
-//                                error = null
-//                                try {
-//                                    val signInIntent = authManager.signInClient.signInIntent
-//                                    signInLauncher.launch(signInIntent)
-//                                } catch (e: Exception) {
-//                                    error = e.message ?: "Failed to start sign-in process"
-//                                } finally {
-//                                    isLoading = false
-//                                }
-//                            }
-//                        }
-//                    ) {
-//                        Text("Sign In with Google")
-//                    }
-//                }
-//            }
-//
-//            error?.let { errorMessage ->
-//                Spacer(modifier = Modifier.height(16.dp))
-//                Text(
-//                    text = errorMessage,
-//                    color = MaterialTheme.colorScheme.error
-//                )
-//            }
-//        }
-
         if (isUserAuthenticated) {
             // Messages section
             if (messages.isNotEmpty()) {
@@ -121,13 +63,18 @@ fun MainScreen(
                         MessageItem(message)
                     }
                 }
+            } else {
+                Text("Loading messages...")
             }
             Spacer(modifier = Modifier.height(24.dp))
             Button(onClick = {
                 sendBroadcastToNowBrief(context)
-            }) { Text("Send to Now Brief") }
+            }, enabled = !isLoadingMessages) { Text("Send to Now Brief") }
             Button(onClick = {
-                scope.launch { authManager.signOut() }
+                scope.launch {
+                    authManager.signOut()
+                }
+                mainViewModel.updateMessages(emptyList())
             }) { Text("Logout")}
         } else {
             Button(
@@ -163,10 +110,14 @@ fun MessageItem(message: Map<String, String>) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
+//            Text(
+//                text = message["subject"] ?: "No Subject",
+//                style = MaterialTheme.typography.titleMedium,
+//                fontWeight = FontWeight.Bold
+//            )
+//            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = message["subject"] ?: "No Subject",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                text = message["body"] ?: "No Body",
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -184,8 +135,8 @@ fun sendBroadcastToNowBrief(context: Context) {
 
     // Optional: Set the component name for security
     intent.component = ComponentName(
-        "com.samsung.android.app.NowBrief", // Package name of the receiving app
-        "com.samsung.android.app.NowBrief.GmailDataReceiver" // Full class name of the receiver
+        "com.samsung.android.app.smartsuggestions", // Package name of the receiving app
+        "com.samsung.android.app.smartsuggestions.GmailDataReceiver" // Full class name of the receiver
     )
 
     try {

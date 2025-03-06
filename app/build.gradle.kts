@@ -26,6 +26,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "CLIENT_ID", "\"${properties["CLIENT_ID"]}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${properties["GEMINI_API_KEY"]}\"")
     }
 
     buildTypes {
@@ -93,7 +94,8 @@ dependencies {
     implementation("com.google.auth:google-auth-library-oauth2-http:1.23.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
 
-
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
 
+    implementation("com.google.ai.client.generativeai:generativeai:0.1.1")
+    implementation("com.google.code.gson:gson:2.8.9")
 }

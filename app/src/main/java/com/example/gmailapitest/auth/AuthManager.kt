@@ -2,6 +2,7 @@ package com.example.gmailapitest.auth
 
 import android.accounts.Account
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -26,6 +27,7 @@ import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.gmail.Gmail
 import com.google.api.services.gmail.GmailScopes
+import com.google.api.services.gmail.model.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -183,6 +185,24 @@ class AuthManager(
         }
     }
 
+    // Helper function to extract the message body
+    fun getMessageBody(message: Message): String {
+        val payload = message.payload
+        return when {
+            payload.body.data != null -> {
+                Base64.decode(payload.body.data, Base64.URL_SAFE).toString(Charsets.UTF_8)
+            }
+            payload.parts != null -> {
+                payload.parts.find { part ->
+                    part.mimeType == "text/plain" || part.mimeType == "text/html"
+                }?.let { part ->
+                    Base64.decode(part.body.data, Base64.URL_SAFE).toString(Charsets.UTF_8)
+                } ?: "No readable content"
+            }
+            else -> "No content"
+        }
+    }
+
     fun initializeGmailService(credential: GoogleAccountCredential, onMessagesLoaded: (List<Map<String, String>>) -> Unit = {}) {
         val httpTransport = GoogleNetHttpTransport.newTrustedTransport()
         val jsonFactory = GsonFactory.getDefaultInstance()
@@ -208,9 +228,10 @@ class AuthManager(
                     val msg = gmailService.users().messages().get(user, message.id).execute()
                     val subject = msg.payload.headers.find { it.name == "Subject" }?.value ?: "No subject"
                     val from = msg.payload.headers.find { it.name == "From" }?.value ?: "Unknown sender"
+                    val body = getMessageBody(msg)
 
                     Log.d("GmailApiService", "subject $subject, from $from")
-                    messageDetails.add(mapOf("subject" to subject, "from" to from, "id" to message.id))
+                    messageDetails.add(mapOf("subject" to subject, "from" to from, "id" to message.id, "body" to body))
                 }
                 
                 // Switch to main thread to call the callback function
